@@ -208,7 +208,7 @@ def ana_data( oscdata, nulldata ):
     #print "chi2/ndf: ",schi2
 
         
-    return chi2/ndf,chi2_nosys/ndf
+    return chi2/ndf,chi2_nosys/ndf,llr/ndf
 
 paramfile = "param_file_dm2_Ue4sq.dat"
 
@@ -259,6 +259,9 @@ h2d_sys   = rt.TH2F("h2d_sys",";|U_{e4}|^{2};#Delta m^{2}_{41}",len(arr_U)-1,arr
 h2dms2_nosys = rt.TH2F("hdms2_nosys",";sin^{2}(2#theta_{e#mu});#Delta m^{2}_{41}",len(arr_sin2em)-1,arr_sin2em,len(arr_dm)-1,arr_dm)
 h2dms2_sys   = rt.TH2F("hdms2_sys",";sin^{2}(2#theta_{e#mu});#Delta m^{2}_{41}",len(arr_sin2em)-1,arr_sin2em,len(arr_dm)-1,arr_dm)
 
+h2dms2_llr_nosys = rt.TH2F("hdms2_llr_nosys",";sin^{2}(2#theta_{e#mu});#Delta m^{2}_{41}",len(arr_sin2em)-1,arr_sin2em,len(arr_dm)-1,arr_dm)
+h2dms2_llr_sys   = rt.TH2F("hdms2_llr_sys",";sin^{2}(2#theta_{e#mu});#Delta m^{2}_{41}",len(arr_sin2em)-1,arr_sin2em,len(arr_dm)-1,arr_dm)
+
 # get null hypothesis
 flux_unosc = read_flux( snowglobes_dir+"/coherent/sterile/fluxes/stpi.dat" )
 
@@ -287,7 +290,7 @@ for n,pars in enumerate(parlist):
     for ic,chan in enumerate(oscdata["channeldata"]["channame"]):
         oscdata["events"][ic,:] *= 3.0*3.14e7*0.000612/40.0*(20.0*20.0)/(L*L)*(5000.0/8766.0)
 
-    chi2,chi2_nosys = ana_data( oscdata, nulldata )
+    chi2,chi2_nosys,llr = ana_data( oscdata, nulldata )
     dm_bin = n/ndm
     U_bin  = n%ndm
     # fill histogram    
@@ -296,9 +299,16 @@ for n,pars in enumerate(parlist):
 
     h2dms2_nosys.SetBinContent( U_bin+1, dm_bin+1, chi2_nosys )
     h2dms2_sys.SetBinContent( U_bin+1, dm_bin+1, chi2 )    
-    #h2d.Fill( pars[1], pars[0], chi2_nosys )    
+
+    h2dms2_llr_nosys.SetBinContent( U_bin+1, dm_bin+1, llr )
 
 
+sin2_em_bf = 4.0*0.163*0.163*0.117*0.117
+dm2_bf = 1.75
+bf_sin2 = rt.TMarker( sin2_em_bf , dm2_bf, 20 )
+bf_sin2.SetMarkerColor( rt.kMagenta )
+    
+# chi2 for dm2 vs. Ue4
 c = rt.TCanvas("osc","c",1400,600)
 c.Divide(2,1)
 
@@ -321,13 +331,24 @@ csin2.Divide(2,1)
 csin2.cd(1).SetLogy(1)
 csin2.cd(1).SetLogx(1)
 h2dms2_nosys.Draw("colz")
-h2dms2_nosys.GetZaxis().SetRangeUser(0,10)
+h2dms2_nosys.GetZaxis().SetRangeUser(0,5)
+bf_sin2.Draw()
 
 csin2.cd(2).SetLogy(1)
 csin2.cd(2).SetLogx(1)
 h2dms2_sys.Draw("colz")
-h2dms2_sys.GetZaxis().SetRangeUser(0,10)
+h2dms2_sys.GetZaxis().SetRangeUser(0,5)
+bf_sin2.Draw()
 csin2.Update()
+
+# LLR for dm2 vs. sin^2
+cllr_sin2 = rt.TCanvas("llr_vs_sin2","nLLR for dm2 vs sin2",800,600)
+
+cllr_sin2.cd(1).SetLogy(1)
+cllr_sin2.cd(1).SetLogx(1)
+h2dms2_llr_nosys.Draw("colz")
+h2dms2_llr_nosys.GetZaxis().SetRangeUser(0,5)
+bf_sin2.Draw()
 
 raw_input()
 
