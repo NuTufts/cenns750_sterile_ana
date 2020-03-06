@@ -253,6 +253,8 @@ arr_U  = array('f',U_list)
 arr_sin2em = array('f',s2emu_list)
 #print arr_dm, arr_U
 
+tfout = rt.TFile("out_ana_dm2_Ue4sq.root","recreate")
+
 h2d_nosys = rt.TH2F("h2d_nosys",";|U_{e4}|^{2};#Delta m^{2}_{41}",len(arr_U)-1,arr_U,len(arr_dm)-1,arr_dm)
 h2d_sys   = rt.TH2F("h2d_sys",";|U_{e4}|^{2};#Delta m^{2}_{41}",len(arr_U)-1,arr_U,len(arr_dm)-1,arr_dm)
 
@@ -267,8 +269,8 @@ flux_unosc = read_flux( snowglobes_dir+"/coherent/sterile/fluxes/stpi.dat" )
 
 channame    = "argon_marley1"
 expt_config = "ar40kt"
-L = 29.0
-#L = 19.5
+#L = 29.0
+L = 19.5
 if False:
     pnull = os.popen( sterile_dir+"/./supernova.pl stpi %s %s 0 %s"%(channame,expt_config,snowglobes_dir) )
     for p in pnull:
@@ -352,5 +354,5 @@ bf_sin2.Draw()
 
 raw_input()
 
-
-
+tfout.Write()
+tfout.Close()
