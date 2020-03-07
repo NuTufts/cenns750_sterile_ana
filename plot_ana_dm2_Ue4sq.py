@@ -101,6 +101,73 @@ def read_output_data( outdir, fluxname, chanfile, exptconfig, data_dir ):
 
     return data
 
+def hist2npy_2d( hist ):
+
+    hnpy = np.zeros( (hist.GetXaxis().GetNbins(),hist.GetYaxis().GetNbins()) )
+    for xbin in xrange( 1,hist.GetXaxis().GetNbins()+1):
+        for ybin in xrange( 1, hist.GetYaxis().GetNbins()+1 ):
+            hnpy[xbin-1,ybin-1] = hist.GetBinContent( xbin, ybin )
+        print "xbin[",xbin-1,"]: ",hnpy[xbin-1,:].sum()
+
+    return hnpy
+    
+
+def apply_smearing_matrix( data, ccsmear, ncsmear, hcc, hnc ):
+    """
+    apply smearing matrix to calculation
+    """
+    # get cc events
+    cc = data["events"][6,:] + data["events"][7,:]
+    # bin edges
+    en = data["en"]
+    #print "cc true E bins: ",len(cc)
+
+    outcc = np.zeros( hcc.GetYaxis().GetNbins() )
+    outen = np.zeros( hcc.GetYaxis().GetNbins()+1 )
+    for ibin in xrange( hcc.GetYaxis().GetNbins()+1 ):
+        outen[ibin] = hcc.GetYaxis().GetBinLowEdge(ibin+1)
+
+    # loop over energy bins
+    nlost = 0.0
+    for ibin in xrange( len(en)-1 ):
+        if en[ibin]<=0.0 or cc[ibin]<=0.0:
+            #if cc[ibin]>0:
+            #print "events lost: ",cc[ibin]            
+            nlost += cc[ibin]            
+            continue
+        if en[ibin]>=hcc.GetXaxis().GetXmax():
+            #if cc[ibin]>0:            
+            #    #print "events lost: ",cc[ibin]
+            nlost += cc[ibin]            
+            continue
+
+        ebin1 = en[ibin]
+        ebin2 = en[ibin+1]
+        xbin  = hcc.GetXaxis().FindBin( en[ibin] )
+        lobin = hcc.GetXaxis().GetBinLowEdge( xbin )
+        mibin = hcc.GetXaxis().GetBinLowEdge( xbin+1 )
+        hibin = hcc.GetXaxis().GetBinLowEdge( xbin+2 )
+
+        bincc = np.zeros( hcc.GetYaxis().GetNbins() )        
+        if ebin1<mibin and ebin2<=mibin:
+            # event true e bin, inside smearing matrix true e bin
+            bincc[:] += cc[ibin]*ccsmear[xbin,:]
+        elif ebin1<mibin and ebin2>mibin:
+            # event true e bin straddles smearing matrix true e bin boundary
+            bincc[:] += (mibin-ebin1)/(ebin2-ebin1)*cc[ibin]*ccsmear[xbin,:]
+            bincc[:] += (ebin2-mibin)/(ebin2-ebin1)*cc[ibin]*ccsmear[xbin+1,:]
+        #print "ibin[",ibin,"] ebin=",[ebin1,ebin2],": hist true bin=",xbin," edges: ",[lobin,mibin,hibin]," inputcc=",cc[ibin]," outbincc=",bincc.sum(),"diff=",cc[ibin]-bincc.sum()
+        outcc += bincc
+
+    #print "input cc: ",cc.sum()
+    #print "output cc: ",outcc.sum()
+    #print "reco cc: ",outcc
+    #print "reco lost: ",nlost
+    #print "bins: ",outen
+    data["ccreco"]    = outcc
+    data["en_ccreco"] = outen
+    return outcc.sum()
+    
 
 def ana_data( oscdata, nulldata ):
     """
@@ -210,6 +277,93 @@ def ana_data( oscdata, nulldata ):
         
     return chi2/ndf,chi2_nosys/ndf,llr/ndf
 
+def ana_data_reco( oscdata, nulldata ):
+    """
+    [ 6   nue_Ar40_marley1 ]  327.01578253498656
+    [ 7   nuebar_Ar40 ]  0.0
+    [ 8   nc_nue_Ar40 ]  26.45700936979586
+    [ 9   nc_numu_Ar40 ]  10.90995486894403
+    [ 10   nc_nutau_Ar40 ]  0.006368001369250145
+    [ 11   nc_nuebar_Ar40 ]  0.009812826296037637
+    [ 12   nc_numubar_Ar40 ]  44.057154025162575
+    [ 13   nc_nutaubar_Ar40 ]  0.009812826296037637
+    """
+    # single bin analysis
+    totnc_null = 0.0
+    totnc_osc  = 0.0
+    for fid in xrange(8,14):
+        totnc_null += np.sum(nulldata["events"][fid,:])
+        totnc_osc  += np.sum(oscdata["events"][fid,:])
+    diff_nc = totnc_osc-totnc_null
+    onebin_nc_chi2 = diff_nc*diff_nc/totnc_null
+
+    cc_null = nulldata["ccreco"]
+    cc_osc  = oscdata["ccreco"]
+    enreco  = nulldata["en_ccreco"]
+    diff_cc = cc_osc - cc_null
+
+
+    for ebin in xrange(len(cc_null)):
+        print "[ebin ",ebin," ",enreco[ebin]," MeV ] null=",cc_null[ebin]," ",cc_osc[ebin]
+    
+    tot_cc_osc  = np.sum(cc_osc)
+    tot_cc_null = np.sum(cc_null)
+    tot_cc_diff = tot_cc_osc - tot_cc_null
+    tot_nc_diff = totnc_osc - totnc_null
+    onebin_cc_chi2 = tot_cc_diff*tot_cc_diff/tot_cc_null
+    onebin_nc_chi2 = tot_nc_diff*tot_nc_diff/totnc_null
+
+    R_null = tot_cc_null/totnc_null
+    R_osc  = tot_cc_osc/totnc_osc
+
+    R_null_sig = R_null*sqrt( 1.0/tot_cc_null + 1.0/totnc_null )
+    R_osc_sig  = R_osc*sqrt( 1.0/tot_cc_osc + 1.0/totnc_osc )
+    
+    R_chi2 = (R_null-R_osc)*(R_null-R_osc)/(R_null_sig*R_null_sig)
+
+    print "tot_cc(null)=",tot_cc_null
+    print "tot_cc(osc)=",tot_cc_osc," tot_cc_diff(osc-null)=",tot_cc_diff
+    print "tot_nc(null)=",totnc_null
+    print "tot_nc(osc)=",totnc_osc," tot_nc_diff(osc-null)=",tot_nc_diff
+    print "R(null)=",R_null," +/- ",R_null_sig
+    print "R(osc)=",R_osc," +/- ",R_osc_sig
+    print "chi2(one-bin) = ",onebin_cc_chi2," + ",onebin_nc_chi2
+    print "chi2(R) = ",R_chi2
+
+    # constrain uncertainty with NC
+    nc_sig = sqrt(totnc_osc)
+    ccnc_ratio_sig = 0.05 # percent uncertainty in ratio
+
+    # calculate the log-likelihood ratio, binned-chi2, binned-chi2 w/ sys
+    llr =  0.
+    chi2 = 0.0
+    chi2_nosys = 0.0
+    ndf = 0.0    
+    for ebin in xrange(len(cc_null)):
+        # neg log-likelihood
+        e = cc_null[ebin]
+        o = cc_osc[ebin]
+
+        if e<=0:
+            continue
+        
+        llr += 2.0*( e-o )
+        if o>0:
+            llr += 2.0*(log(o) - log(e))
+        bin_sig = sqrt( e*(1.0+ccnc_ratio_sig) + totnc_osc )
+        # bin chi2
+        binchi2 = (e-o)*(e-0)/(bin_sig*bin_sig)
+        chi2 += binchi2
+        chi2_nosys += (e-o)*(e-0)/e
+        ndf += 1.0
+    print "-2llr: ",llr
+    print "nbins: ",ndf
+    print "-2llr/NDF: ",llr/ndf
+    print "chi2(stat): ",chi2_nosys," chi2/ndf=",chi2_nosys/ndf
+    print "chi2: ",chi2," chi2/NDF=",chi2/ndf
+            
+    return chi2/ndf,chi2_nosys/ndf,llr/ndf
+
 paramfile = "param_file_dm2_Ue4sq.dat"
 
 # read parameters file
@@ -253,6 +407,14 @@ arr_U  = array('f',U_list)
 arr_sin2em = array('f',s2emu_list)
 #print arr_dm, arr_U
 
+# GET SMEARING MATRICES
+sminfile = rt.TFile("out_smearing_matrix.root","read")
+hcc = sminfile.Get("hcc_pmt")
+hnc = sminfile.Get("hnc_pmt")
+
+ccnpy = hist2npy_2d( hcc )
+ncnpy = hist2npy_2d( hnc )
+
 tfout = rt.TFile("out_ana_dm2_Ue4sq.root","recreate")
 
 h2d_nosys = rt.TH2F("h2d_nosys",";|U_{e4}|^{2};#Delta m^{2}_{41}",len(arr_U)-1,arr_U,len(arr_dm)-1,arr_dm)
@@ -281,6 +443,10 @@ nulldata = read_output_data("out","stpi","argon_marley1","ar40kt",snowglobes_dir
 for ic,chan in enumerate(nulldata["channeldata"]["channame"]):
     nulldata["events"][ic,:] *= 3.0*3.14e7*0.000612/40.0*(20.0*20.0)/(L*L)*(5000.0/8766.0)
 
+# apply smearing matrix
+apply_smearing_matrix( nulldata, ccnpy, ncnpy, hcc, hnc )
+
+    
 # read osc output files
 # get chi2 for each point
 ndm = len(dm_list)-1
@@ -292,7 +458,9 @@ for n,pars in enumerate(parlist):
     for ic,chan in enumerate(oscdata["channeldata"]["channame"]):
         oscdata["events"][ic,:] *= 3.0*3.14e7*0.000612/40.0*(20.0*20.0)/(L*L)*(5000.0/8766.0)
 
-    chi2,chi2_nosys,llr = ana_data( oscdata, nulldata )
+    apply_smearing_matrix( oscdata, ccnpy, ncnpy, hcc, hnc )        
+
+    chi2,chi2_nosys,llr = ana_data_reco( oscdata, nulldata )
     dm_bin = n/ndm
     U_bin  = n%ndm
     # fill histogram    
