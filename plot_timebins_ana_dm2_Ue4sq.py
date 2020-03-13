@@ -12,8 +12,7 @@ sys.path.append(snowglobes_dir+"/coherent/sterile")
 
 from oscillate_flux_sterile import read_flux
 from get_channel_data import get_channel_data
-from apply_smearing_matrix import hist2npy_2d, apply_smearing_matrix
-
+from apply_smearing_matrix import hist2npy_2d, apply_smearing_and_time_matrix, get_time_projections
 
 def read_output_data( outdir, fluxname, chanfile, exptconfig, data_dir ):
 
@@ -266,7 +265,7 @@ def ana_data_reco( oscdata, nulldata ):
 
     # constrain uncertainty with NC
     nc_sig = sqrt(totnc_osc)
-    ccnc_ratio_sig = 0.1 # percent uncertainty in ratio
+    ccnc_ratio_sig = 0.05 # percent uncertainty in ratio
 
     # calculate the log-likelihood ratio, binned-chi2, binned-chi2 w/ sys
     llr =  0.
@@ -284,12 +283,9 @@ def ana_data_reco( oscdata, nulldata ):
         llr += 2.0*( e-o )
         if o>0:
             llr += 2.0*(log(o) - log(e))
-
-        cc_sig_constrained = (nc_sig/totnc_osc)*e
-            
-        bin_sig2 = e*(1.0 + ccnc_ratio_sig + nc_sig/totnc_osc)
+        bin_sig = sqrt( e*(1.0+ccnc_ratio_sig) + totnc_osc )
         # bin chi2
-        binchi2 = (e-o)*(e-0)/bin_sig2
+        binchi2 = (e-o)*(e-0)/(bin_sig*bin_sig)
         chi2 += binchi2
         chi2_nosys += (e-o)*(e-0)/e
         ndf += 1.0
@@ -388,7 +384,11 @@ def ana_data_reco_nocctag( oscdata, nulldata ):
             
     return chi2/ndf,chi2_nosys/ndf,llr/ndf
 
+##################################################################
+##################################################################
+
 paramfile = "param_file_dm2_Ue4sq.dat"
+#paramfile = "test_param_file_dm2_Ue4sq.dat"
 
 # read parameters file
 fpar = open(paramfile,'r')
@@ -439,7 +439,17 @@ hnc = sminfile.Get("hnc_pmt")
 ccnpy = hist2npy_2d( hcc )
 ncnpy = hist2npy_2d( hnc )
 
-tfout = rt.TFile("out_ana_dm2_Ue4sq.root","recreate")
+# GET TIME DIST MATRICES
+tnumu,tnue,tnumubar = get_time_projections()
+print "numu time dist: ",tnumu
+print "nue time dist: ",tnue
+print "numu-bar time dist: ",tnumubar
+
+print "Inputs opened."
+#raw_input()
+#sys.exit(-1)
+
+tfout = rt.TFile("out_recoE_v_time_ana_dm2_Ue4sq.root","recreate")
 
 h2d_nosys = rt.TH2F("h2d_nosys",";|U_{e4}|^{2};#Delta m^{2}_{41}",len(arr_U)-1,arr_U,len(arr_dm)-1,arr_dm)
 h2d_sys   = rt.TH2F("h2d_sys",";|U_{e4}|^{2};#Delta m^{2}_{41}",len(arr_U)-1,arr_U,len(arr_dm)-1,arr_dm)
@@ -455,52 +465,106 @@ flux_unosc = read_flux( snowglobes_dir+"/coherent/sterile/fluxes/stpi.dat" )
 
 channame    = "argon_marley1"
 expt_config = "ar40kt"
-#L = 29.0
-L = 19.5
+L = 29.0
+#L = 19.5
 if False:
+    # Generate NULL hypothesis, only need to do this once
     pnull = os.popen( sterile_dir+"/./supernova.pl stpi %s %s 0 %s"%(channame,expt_config,snowglobes_dir) )
     for p in pnull:
         print p.strip()
 
 nulldata = read_output_data("out","stpi","argon_marley1","ar40kt",snowglobes_dir)
+"""
+    index of data["events"] numpy array containing events
+    [ 6   nue_Ar40_marley1 ]  327.01578253498656
+    [ 7   nuebar_Ar40 ]  0.0
+    [ 8   nc_nue_Ar40 ]  26.45700936979586
+    [ 9   nc_numu_Ar40 ]  10.90995486894403
+    [ 10   nc_nutau_Ar40 ]  0.006368001369250145
+    [ 11   nc_nuebar_Ar40 ]  0.009812826296037637
+    [ 12   nc_numubar_Ar40 ]  44.057154025162575
+    [ 13   nc_nutaubar_Ar40 ]  0.009812826296037637
+"""
 # scale null data to 3 years
 for ic,chan in enumerate(nulldata["channeldata"]["channame"]):
-    nulldata["events"][ic,:] *= 3.0*3.14e7*0.000612/40.0*(20.0*20.0)/(L*L)*(5000.0/8766.0)
+    nulldata["events"][ic,:] *= 3.0*3.14e7*(0.000612/40.0)*(20.0*20.0)/(L*L)*(5000.0/8766.0)
+    print "[channel ",ic," ",chan,"] ",nulldata["events"][ic,:].sum()
 
+# split into prompt and delayed null
+nulldata_prompt = {"events":np.zeros(nulldata["events"].shape),
+                   "en":nulldata["en"]}
+nulldata_delayed = {"events":np.zeros(nulldata["events"].shape),
+                    "en":nulldata["en"]}
+# prompt is from numu-only
+nulldata_prompt["events"][9,:] = nulldata["events"][9,:]
+# delayed: nue and numu-bar and others
+for idx in [6,7,8,10,11,12,13]:
+    nulldata_delayed["events"][idx,:] = nulldata["events"][idx,:]
+
+print "nulldata prompt:  ",nulldata_prompt["events"].sum()
+print "nulldata delayed: ",nulldata_delayed["events"].sum()
+print "nulldata split total: ",nulldata_prompt["events"].sum()+nulldata_delayed["events"].sum()
+print "nulldata original: ",nulldata["events"][6:,:].sum()
 # apply smearing matrix
-nulltotcc,nulltotnc = apply_smearing_matrix( nulldata, ccnpy, ncnpy, hcc, hnc )
+nulltotcc,nulltotnc,nulldata = apply_smearing_and_time_matrix( nulldata_prompt, nulldata_delayed, ccnpy, ncnpy, hcc, hnc, tnumu, tnue, tnumubar )
 print "null-osc CC total: ",nulltotcc
 print "null-osc NC total: ",nulltotnc
 
 # save plot of smeared events
-hnull_cc_smeared = rt.TH1F("hnull_cc_smeared","",nulldata["en_ccreco"].shape[0]-1,nulldata["en_ccreco"][0],nulldata["en_ccreco"][-1])
-hnull_nc_smeared = rt.TH1F("hnull_nc_smeared","",nulldata["en_ccreco"].shape[0]-1,nulldata["en_ccreco"][0],nulldata["en_ccreco"][-1])
+hnull_cc_smeared = rt.TH2F("hnull_cc_smeared","",nulldata["en_ccreco"].shape[0]-1,nulldata["en_ccreco"][0],nulldata["en_ccreco"][-1], 3, 0, 3)
+hnull_nc_smeared = rt.TH2F("hnull_nc_smeared","",nulldata["en_ccreco"].shape[0]-1,nulldata["en_ccreco"][0],nulldata["en_ccreco"][-1], 3, 0, 3)
 for ibin in xrange( nulldata["en_ccreco"].shape[0]-1 ):
-    hnull_cc_smeared.SetBinContent(ibin+1,nulldata["ccreco"][ibin])
-    hnull_nc_smeared.SetBinContent(ibin+1,nulldata["ncreco"][ibin])
+    for tbin in xrange(3):
+        hnull_cc_smeared.SetBinContent(ibin+1,tbin+1,nulldata["ccreco"][ibin,tbin])
+        hnull_nc_smeared.SetBinContent(ibin+1,tbin+1,nulldata["ncreco"][ibin,tbin])
 
 hnull_cc_smeared.Write()
 hnull_nc_smeared.Write()
-
+print "Finished NULL expecation"
+raw_input()
 if False:
-    raw_input()    
     tfout.Close()
     sys.exit(-1)
-    
+
+# oscillated histograms
+hosc_cc_smeared = rt.TH2F("hosc_cc_smeared","",nulldata["en_ccreco"].shape[0]-1,nulldata["en_ccreco"][0],nulldata["en_ccreco"][-1], 3, 0, 3)
+hosc_nc_smeared = rt.TH2F("hosc_nc_smeared","",nulldata["en_ccreco"].shape[0]-1,nulldata["en_ccreco"][0],nulldata["en_ccreco"][-1], 3, 0, 3)
+
 # read osc output files
 # get chi2 for each point
 ndm = len(dm_list)-1
 for n,pars in enumerate(parlist):
+    if n != 1617:
+        continue
     print "============================================="
+    #n = 1427 # big osc effect
+    #n = 1617 # near global best fits
     print "parlist[",n,"] pars=",pars
-    outdir = "grid_output/output_job%04d"%(n)
+    
+    outdir = "grid_output_fortimefit/output_job%04d"%(n)
     oscdata = read_output_data( outdir, "osc_stpi", "argon_marley1", "ar40kt", snowglobes_dir )
+    oscdata_prompt  = read_output_data( outdir, "osc_stpi_prompt", "argon_marley1", "ar40kt", snowglobes_dir )
+    oscdata_delayed = read_output_data( outdir, "osc_stpi_delayed", "argon_marley1", "ar40kt", snowglobes_dir )    
     for ic,chan in enumerate(oscdata["channeldata"]["channame"]):
         oscdata["events"][ic,:] *= 3.0*3.14e7*(0.000612/40.0)*(20.0*20.0)/(L*L)*(5000.0/8766.0)
+        oscdata_prompt["events"][ic,:]  *= 3.0*3.14e7*(0.000612/40.0)*(20.0*20.0)/(L*L)*(5000.0/8766.0)
+        oscdata_delayed["events"][ic,:] *= 3.0*3.14e7*(0.000612/40.0)*(20.0*20.0)/(L*L)*(5000.0/8766.0)
+        #oscdata_delayed["events"][ic,:] *= 0.0
 
-    apply_smearing_matrix( oscdata, ccnpy, ncnpy, hcc, hnc )        
+    osctotcc,osctotnc,oscdata = apply_smearing_and_time_matrix( oscdata_prompt, oscdata_delayed, ccnpy, ncnpy, hcc, hnc, tnumu, tnue, tnumubar )
 
-    chi2,chi2_nosys,llr = ana_data_reco( oscdata, nulldata )
+    if True:
+        for ibin in xrange( nulldata["en_ccreco"].shape[0]-1 ):
+            for tbin in xrange(3):
+                hosc_cc_smeared.SetBinContent(ibin+1,tbin+1,oscdata["ccreco"][ibin,tbin])
+                hosc_nc_smeared.SetBinContent(ibin+1,tbin+1,oscdata["ncreco"][ibin,tbin])
+    
+    #print "osc ratio cc: ",(oscdata['ccreco']-nulldata['ccreco'])/nulldata['ccreco']
+    #print "osc ratio nc: ",(oscdata['ncreco']-nulldata['ncreco'])/nulldata['ncreco']
+    print "osc ratio cc: \n",oscdata['ccreco'],'\n',oscdata["ccreco"].sum()
+    print "osc ratio nc: \n",oscdata['ncreco'],'\n',oscdata["ncreco"].sum()
+    break
+    chi2,chi2_nosys,llr = ana_data_reco( oscdata, nulldata, use_cctag=False )
     dm_bin = n/ndm
     U_bin  = n%ndm
     # fill histogram    
@@ -511,7 +575,12 @@ for n,pars in enumerate(parlist):
     h2dms2_sys.SetBinContent( U_bin+1, dm_bin+1, chi2 )    
 
     h2dms2_llr_nosys.SetBinContent( U_bin+1, dm_bin+1, llr )
+    break
 
+if True:
+    tfout.Write()
+    tfout.Close()
+    sys.exit(-1)
 
 sin2_em_bf = 4.0*0.163*0.163*0.117*0.117
 dm2_bf = 1.75
