@@ -21,12 +21,12 @@ rt.gROOT.ProcessLine("void plot_magenta() {\
 ex1 = rt.TExec("ex1","plot_magenta();");
 
 inputfile19 = rt.TFile("out_ana_dm2_Ue4sq_L19.root")
-inputfile29 = rt.TFile("out_ana_dm2_Ue4sq_L29.root")
+inputfile27 = rt.TFile("out_ana_dm2_Ue4sq_L27.root")
 
 """
 EXPECTED CONTENTS
-TFile**		out_ana_dm2_Ue4sq_L29.root	
- TFile*		out_ana_dm2_Ue4sq_L29.root	
+TFile**		out_ana_dm2_Ue4sq_L27.root	
+ TFile*		out_ana_dm2_Ue4sq_L27.root	
   KEY: TH2F	h2d_nosys;1	
   KEY: TH2F	h2d_sys;1	
   KEY: TH2F	hdms2_nosys;1	
@@ -39,12 +39,12 @@ TFile**		out_ana_dm2_Ue4sq_L29.root
 hsys19   = inputfile19.Get("hdms2_sys")
 hnosys19 = inputfile19.Get("hdms2_nosys")
 
-hsys29   = inputfile29.Get("hdms2_sys")
-hnosys29 = inputfile29.Get("hdms2_nosys")
+hsys27   = inputfile27.Get("hdms2_sys")
+hnosys27 = inputfile27.Get("hdms2_nosys")
 
 
 contlevels = array('d',[5.0,200.0])
-for h in [hsys19,hnosys19,hsys29,hnosys29]:
+for h in [hsys19,hnosys19,hsys27,hnosys27]:
     h.SetContour(2,contlevels)
 
 sin2_em_bf = 4.0*0.163*0.163*0.117*0.117
@@ -69,17 +69,17 @@ hsys19.SetLineStyle(2)
 hsys19.Draw("Cont1SAME")
 
 ex1.Draw()
-hnosys29.SetLineColor(rt.kMagenta)
-hsys29.SetLineColor(rt.kMagenta)
-hnosys29.Draw("Cont1SAME")
-hsys29.SetLineStyle(2)
-hsys29.Draw("Cont1SAME")
+hnosys27.SetLineColor(rt.kMagenta)
+hsys27.SetLineColor(rt.kMagenta)
+hnosys27.Draw("Cont1SAME")
+hsys27.SetLineStyle(2)
+hsys27.Draw("Cont1SAME")
 
 l = rt.TLegend(0.15,0.15,0.6,0.3)
 l.AddEntry(hnosys19,"5 sig. excl, no sys. @ 19.5 m","L")
 l.AddEntry(hsys19,"5 sig. excl, w. 10% cc/nc sys. @ 19.5 m","L")
-l.AddEntry(hnosys29,"5 sig. excl, no sys. @ 29 m","L")
-l.AddEntry(hsys29,"5 sig. excl, w. 10% cc/nc sys. @ 29 m","L")
+l.AddEntry(hnosys27,"5 sig. excl, no sys. @ 27 m","L")
+l.AddEntry(hsys27,"5 sig. excl, w. 10% cc/nc sys. @ 27.5 m","L")
 l.AddEntry(bf_sin2,"Global best fit @ (0.00145,1.75)","P")
 l.SetBorderSize(0)
 l.Draw()

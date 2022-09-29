@@ -455,8 +455,8 @@ flux_unosc = read_flux( snowglobes_dir+"/coherent/sterile/fluxes/stpi.dat" )
 
 channame    = "argon_marley1"
 expt_config = "ar40kt"
-#L = 29.0
-L = 19.5
+L = 27.5
+#L = 19.5
 if False:
     pnull = os.popen( sterile_dir+"/./supernova.pl stpi %s %s 0 %s"%(channame,expt_config,snowglobes_dir) )
     for p in pnull:

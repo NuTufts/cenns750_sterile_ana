@@ -37,8 +37,8 @@ hstack.Add( hcc )
 hstack.Draw()
 hcc.SetLineColor( rt.kBlue )
 hnc.SetLineColor( rt.kRed )
-hcc.SetLineWidth( 1 )
-hnc.SetLineWidth( 1 )
+hcc.SetLineWidth( 2 )
+hnc.SetLineWidth( 2 )
 
 # OSC STACK
 hstack_osc = rt.THStack()
@@ -56,7 +56,7 @@ hstack_osc.Draw()
 
 
 hstack.Draw("hist")
-hstack_osc.Draw("histsame")
+#hstack_osc.Draw("histsame")
 hstack.SetTitle(";reconstructed visible energy (MeVee);")
 
 """
@@ -69,8 +69,8 @@ fY2NDC                        0.848421            Y2 point in NDC coordinates
 tlen = rt.TLegend( 0.67, 0.59, 0.818, 0.848 )
 tlen.AddEntry( hcc, "CC #nu_{e}", "L" )
 tlen.AddEntry( hnc, "NC #nu",   "L" )
-tlen.AddEntry( hcc_osc, "osc. CC #nu_{e}", "L" )
-tlen.AddEntry( hnc_osc, "osc. NC #nu",   "L" )
+#tlen.AddEntry( hcc_osc, "osc. CC #nu_{e}", "L" )
+#tlen.AddEntry( hnc_osc, "osc. NC #nu",   "L" )
 tlen.SetBorderSize(0)
 tlen.Draw()
 
